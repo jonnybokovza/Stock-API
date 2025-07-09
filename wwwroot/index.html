@@ -100,6 +100,7 @@
     <script>
         document.getElementById('stockForm').addEventListener('submit', async function(event) {
             event.preventDefault();
+            console.log('Form submitted. Script is running.'); // VERY EARLY LOG
 
             const symbol = document.getElementById('symbol').value.toUpperCase();
             const fromDate = document.getElementById('from').value;
@@ -108,73 +109,101 @@
             const errorContainer = document.getElementById('error-container');
 
             dataContainer.innerHTML = '<p>Loading...</p>';
-            errorContainer.innerHTML = ''; // Clear previous errors
+            errorContainer.innerHTML = '';
+            console.log('Inputs:', { symbol, fromDate, toDate }); // LOG INPUTS
 
             if (!symbol || !fromDate || !toDate) {
                 errorContainer.innerHTML = 'All fields are required.';
                 dataContainer.innerHTML = '';
+                console.log('Validation failed: All fields required.'); // LOG VALIDATION
                 return;
             }
 
             if (new Date(fromDate) > new Date(toDate)) {
                 errorContainer.innerHTML = 'From Date cannot be after To Date.';
                 dataContainer.innerHTML = '';
+                console.log('Validation failed: From Date after To Date.'); // LOG VALIDATION
                 return;
             }
 
             const apiUrl = `/api/stock/${symbol}?from=${fromDate}&to=${toDate}`;
+            // console.log('Fetching API URL:', apiUrl);
 
             try {
+                // console.log('Inside try block, before fetch.');
                 const response = await fetch(apiUrl);
+                // console.log('Fetch responded. Status:', response.status, 'Ok:', response.ok);
+
+                const responseText = await response.text();
+                // console.log('Raw response text:', responseText);
+
                 if (!response.ok) {
                     let errorMessage = `Error: ${response.status}`;
                     try {
-                        const errorData = await response.json();
+                        const errorData = JSON.parse(responseText);
                         errorMessage += ` - ${errorData.message || response.statusText}`;
                     } catch (e) {
-                        errorMessage += ` - ${response.statusText}`;
+                        errorMessage += ` - ${response.statusText || 'Could not parse error response'}`;
                     }
+                    // console.error('Response not OK:', errorMessage);
                     throw new Error(errorMessage);
                 }
-                const data = await response.json();
 
-                if (data && data.length > 0) {
+                // console.log('Attempting to parse responseText as JSON...');
+                const responseObject = JSON.parse(responseText);
+                // console.log('Parsed response object:', responseObject);
+
+                const priceHistoryArray = responseObject.price_history;
+
+                // console.log('Extracted price_history array:', priceHistoryArray);
+                // console.log('Is price_history an array?', Array.isArray(priceHistoryArray));
+                // if (priceHistoryArray) {
+                //     console.log('Price_history array length:', Array.isArray(priceHistoryArray) ? priceHistoryArray.length : 'N/A (not an array)');
+                // }
+
+                if (priceHistoryArray && Array.isArray(priceHistoryArray) && priceHistoryArray.length > 0) {
                     let tableHtml = `
-                        <h2>${symbol} Stock Data (${fromDate} to ${toDate})</h2>
+                        <h2>${responseObject.symbol} Stock Data (${responseObject.from} to ${responseObject.to})</h2>
                         <table>
                             <thead>
                                 <tr>
                                     <th>Date</th>
-                                    <th>Open</th>
-                                    <th>High</th>
-                                    <th>Low</th>
                                     <th>Close</th>
-                                    <th>Volume</th>
                                 </tr>
                             </thead>
                             <tbody>
                     `;
-                    data.forEach(item => {
+                    priceHistoryArray.forEach((item) => {
+                        // item here is an object like {"date":"2025-02-10T14:00:00.000Z","close":78.24}
+                        // console.log(`Processing item:`, item);
+
+                        const itemDate = item.date;
+                        const itemClosePrice = item.close;
+
+                        if (itemDate === undefined || itemClosePrice === undefined) {
+                            // console.warn(`Item is missing date or close price:`, item);
+                            return;
+                        }
+
                         tableHtml += `
                             <tr>
-                                <td>${new Date(item.date).toLocaleDateString()}</td>
-                                <td>${item.open.toFixed(2)}</td>
-                                <td>${item.high.toFixed(2)}</td>
-                                <td>${item.low.toFixed(2)}</td>
-                                <td>${item.close.toFixed(2)}</td>
-                                <td>${item.volume.toLocaleString()}</td>
+                                <td>${new Date(itemDate).toLocaleDateString()}</td>
+                                <td>${typeof itemClosePrice === 'number' ? itemClosePrice.toFixed(2) : 'N/A'}</td>
                             </tr>
                         `;
                     });
                     tableHtml += '</tbody></table>';
                     dataContainer.innerHTML = tableHtml;
+                    // console.log('Table HTML generated and applied.');
                 } else {
-                    dataContainer.innerHTML = `<p>No data found for ${symbol} between ${fromDate} and ${toDate}.</p>`;
+                    dataContainer.innerHTML = `<p>No data found for ${responseObject.symbol || symbol} between ${responseObject.from || fromDate} and ${responseObject.to || toDate}. (Price history was empty or not found)</p>`;
+                    // console.log('No data to display or price_history not in expected array format.');
                 }
             } catch (error) {
-                console.error('Failed to fetch stock data:', error);
-                dataContainer.innerHTML = ''; // Clear loading message
-                errorContainer.innerHTML = `Failed to fetch stock data: ${error.message}. Please check the console for more details.`;
+                console.error('Error in script:', error.message);
+                // console.error('Full error object:', error);
+                dataContainer.innerHTML = '<p>An error occurred while fetching or processing data. Check console.</p>';
+                errorContainer.innerHTML = `Error: ${error.message}. See console for more details.`;
             }
         });
     </script>
