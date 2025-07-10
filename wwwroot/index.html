@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Data Viewer</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        .container {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            color: #333;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+        input[type="text"],
+        input[type="date"] {
+            width: calc(100% - 22px);
+            padding: 10px;
+            margin-bottom: 20px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        #data-container {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #eee;
+            border-radius: 4px;
+            background-color: #e9ecef;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            text-align: left;
+            padding: 8px;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #007bff;
+            color: white;
+        }
+        tr:hover {
+            background-color: #f1f1f1;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Stock Data Viewer</h1>
+        <form id="stockForm">
+            <div>
+                <label for="symbol">Stock Symbol:</label>
+                <input type="text" id="symbol" name="symbol" placeholder="e.g., AAPL" required>
+            </div>
+            <div>
+                <label for="from">From Date:</label>
+                <input type="date" id="from" name="from" required>
+            </div>
+            <div>
+                <label for="to">To Date:</label>
+                <input type="date" id="to" name="to" required>
+            </div>
+            <button type="submit">Get Data</button>
+        </form>
+
+        <div id="data-container">
+            <p>Enter stock symbol and date range to see data.</p>
+        </div>
+        <div id="error-container" style="color: red; margin-top: 10px;"></div>
+    </div>
+
+    <script>
+        document.getElementById('stockForm').addEventListener('submit', async function(event) {
+            event.preventDefault();
+            console.log('Form submitted. Script is running.'); // VERY EARLY LOG
+
+            const symbol = document.getElementById('symbol').value.toUpperCase();
+            const fromDate = document.getElementById('from').value;
+            const toDate = document.getElementById('to').value;
+            const dataContainer = document.getElementById('data-container');
+            const errorContainer = document.getElementById('error-container');
+
+            dataContainer.innerHTML = '<p>Loading...</p>';
+            errorContainer.innerHTML = '';
+            console.log('Inputs:', { symbol, fromDate, toDate }); // LOG INPUTS
+
+            if (!symbol || !fromDate || !toDate) {
+                errorContainer.innerHTML = 'All fields are required.';
+                dataContainer.innerHTML = '';
+                console.log('Validation failed: All fields required.'); // LOG VALIDATION
+                return;
+            }
+
+            if (new Date(fromDate) > new Date(toDate)) {
+                errorContainer.innerHTML = 'From Date cannot be after To Date.';
+                dataContainer.innerHTML = '';
+                console.log('Validation failed: From Date after To Date.'); // LOG VALIDATION
+                return;
+            }
+
+            const apiUrl = `/api/stock/${symbol}?from=${fromDate}&to=${toDate}`;
+            // console.log('Fetching API URL:', apiUrl);
+
+            try {
+                // console.log('Inside try block, before fetch.');
+                const response = await fetch(apiUrl);
+                // console.log('Fetch responded. Status:', response.status, 'Ok:', response.ok);
+
+                const responseText = await response.text();
+                // console.log('Raw response text:', responseText);
+
+                if (!response.ok) {
+                    let errorMessage = `Error: ${response.status}`;
+                    try {
+                        const errorData = JSON.parse(responseText);
+                        errorMessage += ` - ${errorData.message || response.statusText}`;
+                    } catch (e) {
+                        errorMessage += ` - ${response.statusText || 'Could not parse error response'}`;
+                    }
+                    // console.error('Response not OK:', errorMessage);
+                    throw new Error(errorMessage);
+                }
+
+                // console.log('Attempting to parse responseText as JSON...');
+                const responseObject = JSON.parse(responseText);
+                // console.log('Parsed response object:', responseObject);
+
+                const priceHistoryArray = responseObject.price_history;
+
+                // console.log('Extracted price_history array:', priceHistoryArray);
+                // console.log('Is price_history an array?', Array.isArray(priceHistoryArray));
+                // if (priceHistoryArray) {
+                //     console.log('Price_history array length:', Array.isArray(priceHistoryArray) ? priceHistoryArray.length : 'N/A (not an array)');
+                // }
+
+                if (priceHistoryArray && Array.isArray(priceHistoryArray) && priceHistoryArray.length > 0) {
+                    let tableHtml = `
+                        <h2>${responseObject.symbol} Stock Data (${responseObject.from} to ${responseObject.to})</h2>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Close</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                    `;
+                    priceHistoryArray.forEach((item) => {
+                        // item here is an object like {"date":"2025-02-10T14:00:00.000Z","close":78.24}
+                        // console.log(`Processing item:`, item);
+
+                        const itemDate = item.date;
+                        const itemClosePrice = item.close;
+
+                        if (itemDate === undefined || itemClosePrice === undefined) {
+                            // console.warn(`Item is missing date or close price:`, item);
+                            return;
+                        }
+
+                        tableHtml += `
+                            <tr>
+                                <td>${new Date(itemDate).toLocaleDateString()}</td>
+                                <td>${typeof itemClosePrice === 'number' ? itemClosePrice.toFixed(2) : 'N/A'}</td>
+                            </tr>
+                        `;
+                    });
+                    tableHtml += '</tbody></table>';
+                    dataContainer.innerHTML = tableHtml;
+                    // console.log('Table HTML generated and applied.');
+                } else {
+                    dataContainer.innerHTML = `<p>No data found for ${responseObject.symbol || symbol} between ${responseObject.from || fromDate} and ${responseObject.to || toDate}. (Price history was empty or not found)</p>`;
+                    // console.log('No data to display or price_history not in expected array format.');
+                }
+            } catch (error) {
+                console.error('Error in script:', error.message);
+                // console.error('Full error object:', error);
+                dataContainer.innerHTML = '<p>An error occurred while fetching or processing data. Check console.</p>';
+                errorContainer.innerHTML = `Error: ${error.message}. See console for more details.`;
+            }
+        });
+    </script>
+</body>
+</html>
